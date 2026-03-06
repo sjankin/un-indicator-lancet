@@ -14,22 +14,25 @@ from pathlib import Path
 # Paths — relative to this file's parent; override in run.py if needed
 # ---------------------------------------------------------------------------
 # Layout:
-#   UN Indicator/
-#     hardened/
-#       2025 report/
-#         code/       ← this file lives here
-#         output/     ← report-ready PDFs and CSVs go here
-#     Notebook/
-#       2025 report/
-#         data/       ← metadata Excel and iso_3.csv (shared, read-only)
-#         txt/        ← corpus speeches (shared, read-only)
-PROJECT_ROOT  = Path(__file__).parent                          # .../hardened/2025 report/code
-REPORT_ROOT   = PROJECT_ROOT.parent                            # .../hardened/2025 report
-UNGDC_ROOT    = PROJECT_ROOT.parent.parent.parent              # .../UN Indicator
-NOTEBOOK_ROOT = UNGDC_ROOT / "Notebook"
+#   Dropbox/Research/UNGDC projects/
+#     UN Data/
+#       TXT/                     ← canonical corpus (all sessions, read-only)
+#     UN Climate Change and Health/
+#       UN Indicator/
+#         hardened/
+#           2025 report/
+#             code/              ← this file lives here
+#             output/            ← report-ready PDFs and CSVs
+#         Notebook/2025 report/
+#           data/                ← metadata Excel and iso_3.csv (read-only)
+PROJECT_ROOT    = Path(__file__).parent                        # .../hardened/2025 report/code
+REPORT_ROOT     = PROJECT_ROOT.parent                          # .../hardened/2025 report
+UNGDC_ROOT      = PROJECT_ROOT.parent.parent.parent            # .../UN Indicator
+UNGDC_PROJECTS  = UNGDC_ROOT.parent.parent                     # .../UNGDC projects
+NOTEBOOK_ROOT   = UNGDC_ROOT / "Notebook"
 
-# Default corpus and data paths (Notebook/ stays as the source-of-truth for raw data)
-DEFAULT_TXT_ROOT   = NOTEBOOK_ROOT / "2025 report" / "txt"
+# Canonical corpus: UNGDC projects/UN Data/TXT/ (single source of truth for all projects)
+DEFAULT_TXT_ROOT   = UNGDC_PROJECTS / "UN Data" / "TXT"
 DEFAULT_DATA_DIR   = NOTEBOOK_ROOT / "2025 report" / "data"
 DEFAULT_OUTPUT_DIR = REPORT_ROOT / "output"
 
