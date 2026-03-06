@@ -5,6 +5,7 @@ Produces all numbered PDF + CSV outputs matching the R/2025 report structure.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import matplotlib
@@ -15,6 +16,8 @@ import pandas as pd
 import geopandas as gpd
 
 import config
+
+log = logging.getLogger(__name__)
 
 # Colour palette (matches R report)
 COL_HEALTH      = "#619cff"
@@ -300,6 +303,10 @@ _NATURALEARTH_URL = (
 _NATURALEARTH_LOCAL = (
     Path(__file__).parent / "data" / "ne_110m_admin_0_countries" / "ne_110m_admin_0_countries.shp"
 )
+# Cached copy from sibling project on this machine (gpkg format, same source)
+_NATURALEARTH_CACHE = Path(
+    "/Users/jankinv/Library/CloudStorage/Dropbox/Research/UNGDC projects/values/analysis/.cache/ne_110m_admin_0_countries.gpkg"
+)
 
 
 def _world_map_data(iso_csv: Path) -> gpd.GeoDataFrame:
@@ -308,7 +315,8 @@ def _world_map_data(iso_csv: Path) -> gpd.GeoDataFrame:
 
     Resolution order:
       1. Local shapefile at data/ne_110m_admin_0_countries/ (pre-downloaded)
-      2. Direct URL download (requires internet)
+      2. Cached gpkg from sibling project (machine-specific path)
+      3. Direct URL download (requires internet)
 
     To pre-download: unzip the naturalearth 110m countries shapefile into
     un_indicator/data/ne_110m_admin_0_countries/
@@ -316,6 +324,9 @@ def _world_map_data(iso_csv: Path) -> gpd.GeoDataFrame:
     """
     if _NATURALEARTH_LOCAL.exists():
         world = gpd.read_file(_NATURALEARTH_LOCAL)
+    elif _NATURALEARTH_CACHE.exists():
+        log.info("Using cached naturalearth file at %s", _NATURALEARTH_CACHE)
+        world = gpd.read_file(_NATURALEARTH_CACHE)
     else:
         log.info("Local naturalearth shapefile not found; attempting download from %s",
                  _NATURALEARTH_URL)
@@ -328,6 +339,9 @@ def _world_map_data(iso_csv: Path) -> gpd.GeoDataFrame:
                 f"{_NATURALEARTH_LOCAL.parent}"
             ) from e
 
+    # Normalise column names to lowercase so both the old lowres fixture
+    # (iso_a3) and the full 110m gpkg (ISO_A3) work identically.
+    world.columns = [c.lower() for c in world.columns]
     return world[world["iso_a3"] != "-99"].copy()
 
 
