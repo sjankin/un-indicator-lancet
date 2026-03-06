@@ -342,7 +342,10 @@ def _world_map_data(iso_csv: Path) -> gpd.GeoDataFrame:
     # Normalise column names to lowercase so both the old lowres fixture
     # (iso_a3) and the full 110m gpkg (ISO_A3) work identically.
     world.columns = [c.lower() for c in world.columns]
-    return world[world["iso_a3"] != "-99"].copy()
+    world = world[world["iso_a3"] != "-99"].copy()
+    # Drop Antarctica — it consumes ~30% of plot area for zero data value
+    world = world[world["iso_a3"] != "ATA"]
+    return world
 
 
 def _choropleth(world: gpd.GeoDataFrame,
@@ -402,15 +405,19 @@ def plot_maps(doc_counts: pd.DataFrame,
             cmap = matplotlib.colors.LinearSegmentedColormap.from_list(
                 "c", ["#ffffff", colour])
 
-            fig, ax = plt.subplots(figsize=(14, 8))
+            fig, ax = plt.subplots(figsize=(14, 7))
             world.plot(ax=ax, color="#f0f0f0", linewidth=0.3, edgecolor="#aaaaaa")
             merged[~merged["count"].isna()].plot(
                 column="count", ax=ax, cmap=cmap, linewidth=0.3,
                 edgecolor="#aaaaaa", legend=True,
                 legend_kwds={"label": "Number of references",
-                             "orientation": "horizontal", "shrink": 0.4})
-            ax.set_title(f"{label} references — {year}")
+                             "orientation": "horizontal", "shrink": 0.4,
+                             "pad": 0.02})
+            ax.set_title(f"{label} references — {year}", pad=8)
             ax.axis("off")
+            # Clip to inhabited world: lon -180→180, lat -60→90
+            ax.set_xlim(-180, 180)
+            ax.set_ylim(-60, 90)
             fig.tight_layout()
             _save(fig, output_dir / f"{num}-{label.lower()}-map.pdf")
         except Exception as e:
