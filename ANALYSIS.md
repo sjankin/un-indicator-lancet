@@ -1,7 +1,7 @@
 # UN General Debate Climate-Health Indicator: Analytical Plan
 
 **Lancet Countdown Indicator 5.4.1**
-Last updated: 2026-03-06
+Last updated: 2026-03-06 (Python implementation v2, hardened pipeline)
 
 ---
 
@@ -25,7 +25,8 @@ The data source is the UN General Debate Corpus (UNGDC), covering Sessions 1–N
 - **Coverage**: ~10,952 speeches from 193 UN member states, 1946–2024 (Sessions 1–79)
 - **File format**: Plain text, one file per speech
 - **File naming convention**: `{ISO3}_{SESSION}_{YEAR}.txt` (e.g. `GBR_54_1999.txt`)
-- **Directory structure**: `txt/Session {NN} - {YYYY}/{ISO3}_{NN}_{YYYY}.txt`
+- **Directory structure**: `Session {NN} - {YYYY}/{ISO3}_{NN}_{YYYY}.txt`
+- **Canonical location**: `UNGDC projects/UN Data/TXT/` — single shared source of truth across all UNGDC projects
 
 ### 2.2 Metadata
 
@@ -53,18 +54,28 @@ For each year, compute:
 
 Analysis uses years ≥ 1970 for plots (earlier sessions exist but have sparse coverage).
 
-### 3.3 Multi-word expression (MWE) compounding
+### 3.3 Whitespace normalisation
 
-Before tokenization, apply string replacement to collapse multi-word phrases into single underscore-joined tokens. This ensures dictionary terms are matched as atomic units.
+Before MWE compounding, collapse all whitespace sequences (newlines, tabs, multiple spaces) to a single space:
+
+```python
+text = re.sub(r"\s+", " ", text.lower())
+```
+
+**Rationale**: UNGDC speeches are distributed as plain-text files with hard line wraps. Multi-word phrases that span a line break (e.g. `"air pollution and climate \nchange"`) would not be matched by a literal string replacement without this step. R/quanteda tokenises first then compounds token-by-token, so it is immune to this issue; without whitespace normalisation Python produces fewer matches. This fix eliminates all cases where Python scored lower than R (validated: Python ≥ R for every year 1970–2024).
+
+### 3.4 Multi-word expression (MWE) compounding
+
+After whitespace normalisation, apply string replacement to collapse multi-word phrases into single underscore-joined tokens. This ensures dictionary terms are matched as atomic units.
 
 **Rules:**
-1. Apply to lowercased text
+1. Apply to lowercased, whitespace-normalised text
 2. Sort replacements longest-phrase-first to avoid partial matches (e.g. `"carbon emissions"` before `"carbon emission"`)
 3. Both space-separated AND hyphenated surface forms map to the same canonical underscore form
 
 See `config.py: COMPOUND_MAP` for the full list (N=31 patterns).
 
-### 3.4 Tokenization
+### 3.5 Tokenization
 
 ```python
 tokens = re.findall(r"[a-z][a-z0-9_'-]*", text)
@@ -75,11 +86,11 @@ This regex:
 - Retains hyphens and underscores within tokens (preserving `net-zero`, `co2`, `climate_change`)
 - Discards punctuation, numbers-only tokens, URLs
 
-### 3.5 Stopword removal
+### 3.6 Stopword removal
 
 Remove English stopwords using the NLTK Snowball list (`nltk.corpus.stopwords.words("english")`, 198 words). This matches the stopword list used by the original R/quanteda implementation.
 
-**Validated**: using NLTK stopwords produces identical intersection counts to the R/quanteda pipeline (tested against 2024 session: 57/192 documents in both implementations).
+**Validated**: using NLTK stopwords produces identical baseline intersection counts to the R/quanteda pipeline for shared dictionary terms (tested against 2024 session: R=57/192, Python with extended dictionary=61/192; the +4 difference is entirely attributable to new dictionary terms, not stopword differences).
 
 ---
 
@@ -231,7 +242,7 @@ intersection_count = sum(1 for i in covered if tokens[i] in climate_terms)
 
 **Methodological note**: quanteda's `tokens_select(window=25, padding=TRUE)` uses positions in the stopword-removed token sequence, which is what this implementation replicates. The Python and R implementations produce identical document-level flags when using the NLTK Snowball stopword list (validated against all 192 documents in the 2024 session: exact match).
 
-**Window sensitivity** (2024, n=192): window=10 → 45 docs (23%); window=25 → 57 docs (30%); window=50 → 74 docs (39%). The chosen value of 25 sits in the stable mid-range.
+**Window sensitivity** (2024, n=192): window=10 → 45 docs (23%); window=25 → 61 docs (32%); window=50 → ~74 docs (39%). The chosen value of 25 sits in the stable mid-range.
 
 ### 5.3 Yearly aggregation
 
@@ -340,11 +351,31 @@ The tokenized corpus is serialized to `data/corpus.parquet` after the first run.
 
 ## 8. Validation
 
-The Python pipeline is validated against the R/quanteda 2025 report outputs:
+The Python pipeline is validated against the R/quanteda 2025 report outputs.
 
-- **2024 session** (192 documents): Health=127, Climate=156, Intersection=57 — exact match
-- Full historical comparison run after each implementation change
-- Gold-standard R outputs stored in `Notebook/2025 report/output/` for reference
+### 8.1 2024 session results (192 documents)
+
+| | Health | Climate | Intersection |
+|---|---|---|---|
+| R (original dictionary) | 127 | 156 | 57 |
+| Python (extended dictionary) | 127 | **158** | **61** |
+| Delta | 0 | +2 | +4 |
+
+The +2 climate / +4 intersection difference for 2024 is entirely attributable to new dictionary terms: `fossil_fuels` (NOR), `floods` (NER), `mitigation` (MYS), `temperatures` (PRT), `flooding` (WSM), `drought` (ZMB). There are zero regressions — Python ≥ R for every year from 1970 to 2024.
+
+### 8.2 Full corpus delta (1970–2024)
+
+| Category | R total doc-years | Python total doc-years | Delta |
+|---|---|---|---|
+| Health | baseline | +3 | +3 |
+| Climate | baseline | +1,066 | +1,066 |
+| Intersection | baseline | +182 | +182 |
+
+The large climate delta in pre-2007 years reflects R's dictionary entirely missing physical climate vocabulary (`drought`, `flood`, `hurricane`, etc.) that dominated speeches before climate policy language emerged.
+
+### 8.3 Reference files
+
+R reference KWIC files are preserved as `Notebook/2025 report/output/*_25_fixed.csv` — these must not be deleted as they are the R baseline for future comparisons.
 
 ---
 
@@ -352,14 +383,16 @@ The Python pipeline is validated against the R/quanteda 2025 report outputs:
 
 | Item | R (old) | Python (new) | Impact |
 |---|---|---|---|
+| Whitespace normalisation | Not needed (quanteda tokenises first) | Added: collapse `\n`/`\t`/spaces before compounding | Eliminates missed compounds across line breaks; zero regressions |
 | `mental_disorder`/`mental_disorders` | In dict (0 hits) | Removed | None on counts; clean-up |
-| `mental_health` | Not in dict | Added | Small increase in health counts |
-| `ghost entries` (`ghge`, `ghges`, `green_house`) | In dict (0 hits) | Retained in config, noted | None |
-| `greenhouse gas` (space form) | Caught only via `greenhouse` standalone | Explicitly compounded to `greenhouse_gas` | Minor increase in compound-form counts; `greenhouse` still catches both |
-| Hyphenated forms (`net-zero` etc.) | Separate dict entries | Normalised to underscore; single dict entry | Identical coverage, cleaner |
-| New climate terms (see §4.2) | Not in dict | Added | Increased climate/intersection counts |
-| New health terms (see §4.3) | Not in dict | Added | Small increase in health counts |
-| Surface form normalisation | Two mechanisms (compound + hyphen dict entries) | Single mechanism (compound map handles all) | Cleaner; identical results for validated terms |
+| `mental_health` | Not in dict | Added | +51 health KWIC entries |
+| `non_communicable_diseases` | Not in dict (R glob `disease*` misses it) | Added | +252 health KWIC entries |
+| `ghost entries` (`ghge`, `ghges`, `green_house`) | In dict (0 hits) | Retained in config, noted as stubs | None |
+| `greenhouse gas` (space form) | Caught only via `greenhouse` standalone | Explicitly compounded to `greenhouse_gas` | +563 climate KWIC entries as compound form |
+| Hyphenated forms (`net-zero` etc.) | Separate dict entries | Normalised to underscore via compound map | Identical coverage, cleaner implementation |
+| New climate terms (see §4.2) | Not in dict | Added 21 new terms | +1,066 document-years of climate coverage across full corpus |
+| New health terms (see §4.3) | Not in dict | Added 5 new terms | +3 document-years of health coverage across full corpus |
+| Maps | `ggplot2::map_data()` | `geopandas` with naturalearth 110m | Maps clipped to −60°→+90° latitude; Antarctica excluded |
 
 ---
 
