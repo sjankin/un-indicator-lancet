@@ -174,7 +174,10 @@ def main() -> None:
             viz.plot_gender_intersection(gender_df, output_dir)
 
         iso_csv = data_dir / "iso_3.csv"
-        viz.plot_maps(doc_counts, iso_csv, output_dir, data_year=config.DATA_YEAR)
+        try:
+            viz.plot_maps(doc_counts, iso_csv, output_dir, data_year=config.DATA_YEAR)
+        except FileNotFoundError as e:
+            log.warning("Map plots skipped: %s", e)
 
     # ------------------------------------------------------------------
     # Stage 8: summary to console

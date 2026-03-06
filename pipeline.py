@@ -106,18 +106,25 @@ def _apply_compounds(text: str) -> str:
 _TOKEN_RE = re.compile(r"[a-z][a-z0-9_'-]*")
 
 
+_WHITESPACE_RE = re.compile(r"\s+")
+
+
 def tokenize(text: str) -> list[str]:
     """
     Full pre-processing pipeline for one document:
       1. lowercase
-      2. MWE compounding
-      3. regex tokenization
-      4. stopword removal (NLTK Snowball, matching quanteda)
+      2. whitespace normalisation (collapse \\n, \\t, multiple spaces → single space)
+         — required so MWE phrases split across lines are compounded correctly,
+           matching quanteda's token-level compound matching behaviour
+      3. MWE compounding
+      4. regex tokenization
+      5. stopword removal (NLTK Snowball, matching quanteda)
 
     Returns list of tokens.
     """
     lowered = text.lower()
-    compounded = _apply_compounds(lowered)
+    normalised = _WHITESPACE_RE.sub(" ", lowered)
+    compounded = _apply_compounds(normalised)
     raw_tokens = _TOKEN_RE.findall(compounded)
     return [t for t in raw_tokens if t not in STOPWORDS and len(t) > 1]
 

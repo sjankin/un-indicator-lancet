@@ -294,12 +294,41 @@ def plot_gender_intersection(gender_df: pd.DataFrame, output_dir: Path) -> None:
 # Maps: plots 27–29
 # ---------------------------------------------------------------------------
 
+_NATURALEARTH_URL = (
+    "https://naciscdn.org/naturalearth/110m/cultural/ne_110m_admin_0_countries.zip"
+)
+_NATURALEARTH_LOCAL = (
+    Path(__file__).parent / "data" / "ne_110m_admin_0_countries" / "ne_110m_admin_0_countries.shp"
+)
+
+
 def _world_map_data(iso_csv: Path) -> gpd.GeoDataFrame:
-    """Return world GeoDataFrame with ISO3 codes joined."""
-    world = gpd.read_file(gpd.datasets.get_path("naturalearth_lowres"))
-    # naturalearth_lowres uses iso_a3; handle -99 (missing) entries
-    world = world[world["iso_a3"] != "-99"].copy()
-    return world
+    """
+    Return world GeoDataFrame with ISO3 codes (column iso_a3).
+
+    Resolution order:
+      1. Local shapefile at data/ne_110m_admin_0_countries/ (pre-downloaded)
+      2. Direct URL download (requires internet)
+
+    To pre-download: unzip the naturalearth 110m countries shapefile into
+    un_indicator/data/ne_110m_admin_0_countries/
+    Source: https://naciscdn.org/naturalearth/110m/cultural/ne_110m_admin_0_countries.zip
+    """
+    if _NATURALEARTH_LOCAL.exists():
+        world = gpd.read_file(_NATURALEARTH_LOCAL)
+    else:
+        log.info("Local naturalearth shapefile not found; attempting download from %s",
+                 _NATURALEARTH_URL)
+        try:
+            world = gpd.read_file(_NATURALEARTH_URL)
+        except Exception as e:
+            raise FileNotFoundError(
+                "World shapefile not available. "
+                f"Download and unzip {_NATURALEARTH_URL} into "
+                f"{_NATURALEARTH_LOCAL.parent}"
+            ) from e
+
+    return world[world["iso_a3"] != "-99"].copy()
 
 
 def _choropleth(world: gpd.GeoDataFrame,
