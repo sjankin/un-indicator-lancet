@@ -1,0 +1,9 @@
+nltk>=3.9
+pandas>=2.2
+numpy>=1.26
+matplotlib>=3.10
+seaborn>=0.13
+geopandas>=1.1
+openpyxl>=3.1
+pyarrow>=22.0
+tqdm>=4.67
